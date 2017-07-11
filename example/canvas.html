@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="data.js">
+  </script>
+</head>
+<body>
+
+<canvas id="myCanvas" width="1800" height="900" style="border:1px solid #d3d3d3;">
+Your browser does not support the HTML5 canvas tag.</canvas>
+
+<script>
+
+var c = document.getElementById("myCanvas");
+var ctx = c.getContext("2d");
+
+data.forEach(function(val){
+  ctx.font = val.height + "px Georgia";
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+
+  var center = [val.center[0] + 900, val.center[1] + 450];
+  var size = [val.width, val.height];
+  // ctx.fillText(val.label, center[0], center[1]);
+  ctx.rect(center[0] - size[0] * 0.5, center[1] - size[1] * 0.5, size[0], size[1]);
+  ctx.strokeStyle = 'rgba(100,0,0)';
+  ctx.setLineDash([6]);
+  ctx.stroke();
+});
+
+</script>
+</body>
+</html>
