@@ -59,7 +59,7 @@ export default class TagMap {
 
   _getScale(minWeight, maxWeight, minFontSize, maxFontSize) {
     if (minWeight === maxWeight) {
-      return x => (minFontSize + maxFontSize) * 0.5;
+      return x => minFontSize;
     }
     // set log scale for label size
     return scaleLog().base(Math.E)

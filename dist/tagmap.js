@@ -126,7 +126,7 @@ var TagMap = function () {
     value: function _getScale(minWeight, maxWeight, minFontSize, maxFontSize) {
       if (minWeight === maxWeight) {
         return function (x) {
-          return (minFontSize + maxFontSize) * 0.5;
+          return minFontSize;
         };
       }
       // set log scale for label size
