@@ -4,35 +4,55 @@ import Tag from './tag';
 import rbush from 'rbush';
 import ClusterTree from 'hdbscanjs';
 
+const RADIANS_PER_DEGREE =  Math.PI / 180;
+// screen-space aggregation threshold
+const DEFAULT_MAX_DIST = 20;
+// max number of tags shown in the view
+const DEFAULT_MAX_NUMBER_OF_TAGS = 100;
+
 export default class TagMap {
-  constructor(distFunc = TagMap.distFunc.euclidean) {
+  constructor(distFunc = ClusterTree.distFunc.euclidean) {
     this.tagTree = {};
     this.tagList = [];
     this.distFunc = distFunc;
   }
 
-  buildHierarchy(data, {getLabel = val => val.label, getPosition = val => val.position, getWeight = val => val.weight}) {
+  buildHierarchy(data, {
+    getLabel = val => val.label,
+    getPosition = val => val.position,
+    getWeight = val => val.weight
+  }) {
     // clear tree
     this.tagTree = {};
+    const {tagTree, distFunc} = this;
+
     // group tags based on the content
     data.forEach(val => {
       const label = getLabel(val);
-      if (!this.tagTree.hasOwnProperty(label)) {
-        this.tagTree[label] = [];
+      if (!tagTree.hasOwnProperty(label)) {
+        tagTree[label] = [];
       }
-      this.tagTree[label].push({data: getPosition(val), opt: getWeight(val)});
+      tagTree[label].push({data: getPosition(val), opt: getWeight(val)});
     });
-    for (const key in this.tagTree) {
-      const cluster = new ClusterTree(this.tagTree[key], this.distFunc);
-      this.tagTree[key] = cluster.getTree();
+    for (const key in tagTree) {
+      const cluster = new ClusterTree(tagTree[key], distFunc);
+      tagTree[key] = cluster.getTree();
     }
   }
 
-  extractCluster({project = val => val, bbox = null, weightThreshold = 0, maxDist = TagMap.maxDist}) {
+  extractCluster({
+    project = val => val,
+    bbox = null,
+    weightThreshold = 0,
+    maxDist = DEFAULT_MAX_DIST
+  }) {
     // clear tagList
     this.tagList = [];
-    for (const key in this.tagTree) {
-      const tree = this.tagTree[key];
+    const {tagTree, tagList} = this;
+    const maxDistSq = maxDist * maxDist;
+
+    for (const key in tagTree) {
+      const tree = tagTree[key];
       const flagCluster = tree.filter(val => {
         // a cluster of a single point
         if (val.isLeaf) {
@@ -41,20 +61,23 @@ export default class TagMap {
         // test the cluster does not split under the current zoom level
         const cp0 = project(val.edge[0]);
         const cp1 = project(val.edge[1]);
-        return Math.sqrt(Math.pow((cp0[0] - cp1[0]), 2) + Math.pow((cp0[1] - cp1[1]), 2)) < maxDist;
+        const dx = cp0[0] - cp1[0];
+        const dy = cp0[1] - cp1[1];
+        return dx * dx + dy * dy < maxDistSq;
       }, bbox);
 
       // generate tags which passed the test and weightThreshold
-      const tags = flagCluster.map(val => {
+      const tags = flagCluster.forEach(val => {
         const tag = new Tag(key);
         val.data.forEach((p, i) => tag.add(p, val.opt[i]));
-        tag.setCenter(project(tag.center));
-        return tag;
-      }).filter(val => val.weight >= weightThreshold);
 
-      this.tagList = this.tagList.concat(tags);
+        if (tag.weight >= weightThreshold) {
+          tag.setCenter(project(tag.center));
+          tagList.push(tag);
+        }
+      });
     }
-    return this.tagList;
+    return tagList;
   }
 
   _getScale(minWeight, maxWeight, minFontSize, maxFontSize) {
@@ -68,11 +91,10 @@ export default class TagMap {
   }
 
   // center is two element array
-  _rotate(center, angle, radius) {
-    const radian = angle / 180.0 * Math.PI;
-    const x = Math.cos(radian) * radius + center[0];
-    const y = Math.sin(radian) * radius + center[1];
-    return [x, y];
+  _rotate(center, angle, radius, out) {
+    const radian = angle * RADIANS_PER_DEGREE;
+    out[0] = Math.cos(radian) * radius + center[0];
+    out[1] = Math.sin(radian) * radius + center[1];
   }
 
   // forcely place tag without overlap removal
@@ -89,19 +111,20 @@ export default class TagMap {
     let iter = 0;
     const iterThreshold = 20;
 
-    const center = tag.center.slice();
+    const p = [];
+    const bbox = {};
+
     while (iter <= iterThreshold) {
       // calculate the new candidate position
-      const p = this._rotate(center, angle, radius);
-      tag.setCenter(p);
-      const bbox = {
-        minX: p[0] - tag.width * 0.5,
-        maxX: p[0] + tag.width * 0.5,
-        minY: p[1] - tag.height * 0.5,
-        maxY: p[1] + tag.height * 0.5
-      };
+      this._rotate(tag.center, angle, radius, p);
+      bbox.minX = p[0] - tag.width * 0.5;
+      bbox.maxX = p[0] + tag.width * 0.5;
+      bbox.minY = p[1] - tag.height * 0.5;
+      bbox.maxY = p[1] + tag.height * 0.5;
+
       // if no collision, position the tag
       if (!tree.collides(bbox)) {
+        tag.setCenter(p);
         placedTag.push(tag);
         tree.insert(bbox);
         break;
@@ -113,19 +136,27 @@ export default class TagMap {
     }
   }
 
-  layout({minFontSize, maxFontSize, sizeMeasurer, isForce = false, maxNumOfTags = TagMap.maxNumOfTags}) {
-    if (!this.tagList || this.tagList.length === 0) {
+  layout({
+    tagList = this.tagList,
+    minFontSize,
+    maxFontSize,
+    sizeMeasurer,
+    isForce = false,
+    maxNumOfTags = DEFAULT_MAX_NUMBER_OF_TAGS
+  }) {
+    if (!tagList || tagList.length === 0) {
       return [];
     }
     // get tags in descending order
-    const orderedTags = this.tagList.sort((a, b) => b.weight - a.weight);
+    const orderedTags = tagList.sort((a, b) => b.weight - a.weight);
     // get scale function to calculate size of label bounding box
     const minWeight = orderedTags[orderedTags.length - 1].weight;
     const maxWeight = orderedTags[0].weight;
+    const sizeScale = this._getScale(minWeight, maxWeight, minFontSize, maxFontSize);
 
     // calculate bounding box
     orderedTags.forEach(x => {
-      const fontSize = this._getScale(minWeight, maxWeight, minFontSize, maxFontSize)(x.weight);
+      const fontSize = sizeScale(x.weight);
       const {width, height} = sizeMeasurer(x.label, fontSize);
       x.setSize(width, height);
     });
@@ -145,19 +176,4 @@ export default class TagMap {
     }
     return placedTag;
   }
-
-  // screen-space aggregation threshold: invisible to the user
-  static get maxDist() {
-    return 20;
-  }
-
-  // max number of tags shown in the view: invisible to the user for now, might change to a user-defined paramater later
-  static get maxNumOfTags() {
-    return 100;
-  }
 }
-
-TagMap.distFunc = {
-  euclidean: ClusterTree.distFunc.euclidean,
-  geoDist: ClusterTree.distFunc.geoDist
-};

@@ -15,17 +15,20 @@ export default class Tag {
 
   // loc: screen coords [x, y]
   add(loc, weight) {
-    this.coords.push(loc);
+    const {coords, center} = this;
+    coords.push(loc);
+
+    const len = coords.length;
     // update center
-    this.center[0] = (this.center[0] * (this.coords.length - 1) + loc[0]) / this.coords.length;
-    this.center[1] = (this.center[1] * (this.coords.length - 1) + loc[1]) / this.coords.length;
+    center[0] = (center[0] * (len - 1) + loc[0]) / len;
+    center[1] = (center[1] * (len - 1) + loc[1]) / len;
     // update weight
     this.weight += weight;
   }
 
   setCenter(pt) {
     // force set center in the overlap removal loop
-    this.center = [pt[0], pt[1]];
+    this.center = pt;
   }
 
   setSize(width, height) {
