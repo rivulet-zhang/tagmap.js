@@ -25,9 +25,15 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
+var RADIANS_PER_DEGREE = Math.PI / 180;
+// screen-space aggregation threshold
+var DEFAULT_MAX_DIST = 20;
+// max number of tags shown in the view
+var DEFAULT_MAX_NUMBER_OF_TAGS = 100;
+
 var TagMap = function () {
   function TagMap() {
-    var distFunc = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : TagMap.distFunc.euclidean;
+    var distFunc = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : _hdbscanjs2.default.distFunc.euclidean;
 
     _classCallCheck(this, TagMap);
 
@@ -39,8 +45,6 @@ var TagMap = function () {
   _createClass(TagMap, [{
     key: 'buildHierarchy',
     value: function buildHierarchy(data, _ref) {
-      var _this = this;
-
       var _ref$getLabel = _ref.getLabel,
           getLabel = _ref$getLabel === undefined ? function (val) {
         return val.label;
@@ -56,24 +60,26 @@ var TagMap = function () {
 
       // clear tree
       this.tagTree = {};
+      var tagTree = this.tagTree,
+          distFunc = this.distFunc;
+
       // group tags based on the content
+
       data.forEach(function (val) {
         var label = getLabel(val);
-        if (!_this.tagTree.hasOwnProperty(label)) {
-          _this.tagTree[label] = [];
+        if (!tagTree.hasOwnProperty(label)) {
+          tagTree[label] = [];
         }
-        _this.tagTree[label].push({ data: getPosition(val), opt: getWeight(val) });
+        tagTree[label].push({ data: getPosition(val), opt: getWeight(val) });
       });
-      for (var key in this.tagTree) {
-        var cluster = new _hdbscanjs2.default(this.tagTree[key], this.distFunc);
-        this.tagTree[key] = cluster.getTree();
+      for (var key in tagTree) {
+        var cluster = new _hdbscanjs2.default(tagTree[key], distFunc);
+        tagTree[key] = cluster.getTree();
       }
     }
   }, {
     key: 'extractCluster',
     value: function extractCluster(_ref2) {
-      var _this2 = this;
-
       var _ref2$project = _ref2.project,
           project = _ref2$project === undefined ? function (val) {
         return val;
@@ -83,13 +89,17 @@ var TagMap = function () {
           _ref2$weightThreshold = _ref2.weightThreshold,
           weightThreshold = _ref2$weightThreshold === undefined ? 0 : _ref2$weightThreshold,
           _ref2$maxDist = _ref2.maxDist,
-          maxDist = _ref2$maxDist === undefined ? TagMap.maxDist : _ref2$maxDist;
+          maxDist = _ref2$maxDist === undefined ? DEFAULT_MAX_DIST : _ref2$maxDist;
 
       // clear tagList
       this.tagList = [];
+      var tagTree = this.tagTree,
+          tagList = this.tagList;
+
+      var maxDistSq = maxDist * maxDist;
 
       var _loop = function _loop(key) {
-        var tree = _this2.tagTree[key];
+        var tree = tagTree[key];
         var flagCluster = tree.filter(function (val) {
           // a cluster of a single point
           if (val.isLeaf) {
@@ -98,28 +108,29 @@ var TagMap = function () {
           // test the cluster does not split under the current zoom level
           var cp0 = project(val.edge[0]);
           var cp1 = project(val.edge[1]);
-          return Math.sqrt(Math.pow(cp0[0] - cp1[0], 2) + Math.pow(cp0[1] - cp1[1], 2)) < maxDist;
+          var dx = cp0[0] - cp1[0];
+          var dy = cp0[1] - cp1[1];
+          return dx * dx + dy * dy < maxDistSq;
         }, bbox);
 
         // generate tags which passed the test and weightThreshold
-        var tags = flagCluster.map(function (val) {
+        var tags = flagCluster.forEach(function (val) {
           var tag = new _tag2.default(key);
           val.data.forEach(function (p, i) {
             return tag.add(p, val.opt[i]);
           });
-          tag.setCenter(project(tag.center));
-          return tag;
-        }).filter(function (val) {
-          return val.weight >= weightThreshold;
-        });
 
-        _this2.tagList = _this2.tagList.concat(tags);
+          if (tag.weight >= weightThreshold) {
+            tag.setCenter(project(tag.center));
+            tagList.push(tag);
+          }
+        });
       };
 
-      for (var key in this.tagTree) {
+      for (var key in tagTree) {
         _loop(key);
       }
-      return this.tagList;
+      return tagList;
     }
   }, {
     key: '_getScale',
@@ -137,11 +148,10 @@ var TagMap = function () {
 
   }, {
     key: '_rotate',
-    value: function _rotate(center, angle, radius) {
-      var radian = angle / 180.0 * Math.PI;
-      var x = Math.cos(radian) * radius + center[0];
-      var y = Math.sin(radian) * radius + center[1];
-      return [x, y];
+    value: function _rotate(center, angle, radius, out) {
+      var radian = angle * RADIANS_PER_DEGREE;
+      out[0] = Math.cos(radian) * radius + center[0];
+      out[1] = Math.sin(radian) * radius + center[1];
     }
 
     // forcely place tag without overlap removal
@@ -164,19 +174,20 @@ var TagMap = function () {
       var iter = 0;
       var iterThreshold = 20;
 
-      var center = tag.center.slice();
+      var p = [];
+      var bbox = {};
+
       while (iter <= iterThreshold) {
         // calculate the new candidate position
-        var p = this._rotate(center, angle, radius);
-        tag.setCenter(p);
-        var bbox = {
-          minX: p[0] - tag.width * 0.5,
-          maxX: p[0] + tag.width * 0.5,
-          minY: p[1] - tag.height * 0.5,
-          maxY: p[1] + tag.height * 0.5
-        };
+        this._rotate(tag.center, angle, radius, p);
+        bbox.minX = p[0] - tag.width * 0.5;
+        bbox.maxX = p[0] + tag.width * 0.5;
+        bbox.minY = p[1] - tag.height * 0.5;
+        bbox.maxY = p[1] + tag.height * 0.5;
+
         // if no collision, position the tag
         if (!tree.collides(bbox)) {
+          tag.setCenter(p);
           placedTag.push(tag);
           tree.insert(bbox);
           break;
@@ -190,30 +201,31 @@ var TagMap = function () {
   }, {
     key: 'layout',
     value: function layout(_ref3) {
-      var _this3 = this;
-
-      var minFontSize = _ref3.minFontSize,
+      var _ref3$tagList = _ref3.tagList,
+          tagList = _ref3$tagList === undefined ? this.tagList : _ref3$tagList,
+          minFontSize = _ref3.minFontSize,
           maxFontSize = _ref3.maxFontSize,
           sizeMeasurer = _ref3.sizeMeasurer,
           _ref3$isForce = _ref3.isForce,
           isForce = _ref3$isForce === undefined ? false : _ref3$isForce,
           _ref3$maxNumOfTags = _ref3.maxNumOfTags,
-          maxNumOfTags = _ref3$maxNumOfTags === undefined ? TagMap.maxNumOfTags : _ref3$maxNumOfTags;
+          maxNumOfTags = _ref3$maxNumOfTags === undefined ? DEFAULT_MAX_NUMBER_OF_TAGS : _ref3$maxNumOfTags;
 
-      if (!this.tagList || this.tagList.length === 0) {
+      if (!tagList || tagList.length === 0) {
         return [];
       }
       // get tags in descending order
-      var orderedTags = this.tagList.sort(function (a, b) {
+      var orderedTags = tagList.sort(function (a, b) {
         return b.weight - a.weight;
       });
       // get scale function to calculate size of label bounding box
       var minWeight = orderedTags[orderedTags.length - 1].weight;
       var maxWeight = orderedTags[0].weight;
+      var sizeScale = this._getScale(minWeight, maxWeight, minFontSize, maxFontSize);
 
       // calculate bounding box
       orderedTags.forEach(function (x) {
-        var fontSize = _this3._getScale(minWeight, maxWeight, minFontSize, maxFontSize)(x.weight);
+        var fontSize = sizeScale(x.weight);
 
         var _sizeMeasurer = sizeMeasurer(x.label, fontSize),
             width = _sizeMeasurer.width,
@@ -259,31 +271,9 @@ var TagMap = function () {
 
       return placedTag;
     }
-
-    // screen-space aggregation threshold: invisible to the user
-
-  }], [{
-    key: 'maxDist',
-    get: function get() {
-      return 20;
-    }
-
-    // max number of tags shown in the view: invisible to the user for now, might change to a user-defined paramater later
-
-  }, {
-    key: 'maxNumOfTags',
-    get: function get() {
-      return 100;
-    }
   }]);
 
   return TagMap;
 }();
 
 exports.default = TagMap;
-
-
-TagMap.distFunc = {
-  euclidean: _hdbscanjs2.default.distFunc.euclidean,
-  geoDist: _hdbscanjs2.default.distFunc.geoDist
-};

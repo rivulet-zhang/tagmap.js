@@ -31,10 +31,15 @@ var Tag = function () {
   _createClass(Tag, [{
     key: "add",
     value: function add(loc, weight) {
-      this.coords.push(loc);
+      var coords = this.coords,
+          center = this.center;
+
+      coords.push(loc);
+
+      var len = coords.length;
       // update center
-      this.center[0] = (this.center[0] * (this.coords.length - 1) + loc[0]) / this.coords.length;
-      this.center[1] = (this.center[1] * (this.coords.length - 1) + loc[1]) / this.coords.length;
+      center[0] = (center[0] * (len - 1) + loc[0]) / len;
+      center[1] = (center[1] * (len - 1) + loc[1]) / len;
       // update weight
       this.weight += weight;
     }
@@ -42,7 +47,7 @@ var Tag = function () {
     key: "setCenter",
     value: function setCenter(pt) {
       // force set center in the overlap removal loop
-      this.center = [pt[0], pt[1]];
+      this.center = pt;
     }
   }, {
     key: "setSize",
