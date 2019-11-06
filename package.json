@@ -23,7 +23,7 @@
     "tag cloud"
   ],
   "devDependencies": {
-    "axios": "0.16.2",
+    "axios": "0.19.0",
     "babel-cli": "6.16.0",
     "babel-core": "6.16.0",
     "babel-eslint": "7.0.0",
