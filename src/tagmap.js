@@ -1,10 +1,10 @@
 /* eslint-disable max-len */
 import {scaleLog} from 'd3-scale';
 import Tag from './tag';
-import rbush from 'rbush';
+import RBush from 'rbush';
 import ClusterTree from 'hdbscanjs';
 
-const RADIANS_PER_DEGREE =  Math.PI / 180;
+const RADIANS_PER_DEGREE = Math.PI / 180;
 // screen-space aggregation threshold
 const DEFAULT_MAX_DIST = 20;
 // max number of tags shown in the view
@@ -67,7 +67,7 @@ export default class TagMap {
       }, bbox);
 
       // generate tags which passed the test and weightThreshold
-      const tags = flagCluster.forEach(val => {
+      flagCluster.forEach(val => {
         const tag = new Tag(key);
         val.data.forEach((p, i) => tag.add(p, val.opt[i]));
 
@@ -163,7 +163,7 @@ export default class TagMap {
 
     // run actual layout algorithm
     const placedTag = [];
-    const tree = rbush();
+    const tree = new RBush();
     for (const tag of orderedTags) {
       if (placedTag.length >= maxNumOfTags) {
         break;

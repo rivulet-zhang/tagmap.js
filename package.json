@@ -39,8 +39,8 @@
   "private": false,
   "license": "MIT",
   "dependencies": {
-    "d3-scale": "1.0.6",
+    "d3-scale": "3.2.1",
     "hdbscanjs": "1.0.12",
-    "rbush": "2.0.1"
+    "rbush": "3.0.1"
   }
 }
