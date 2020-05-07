@@ -4,12 +4,13 @@
 // import { expect } from 'chai';
 import TagMap from '../dist/tagmap';
 import axios from 'axios';
+import ClusterTree from 'hdbscanjs';
 
 const FILE_PATH = 'https://rivulet-zhang.github.io/dataRepo/tagmap/hashtags10k.json';
 
 describe('hdbscan', () => {
 
-  const tagMap = new TagMap(TagMap.distFunc.geoDist);
+  const tagMap = new TagMap(ClusterTree.distFunc.geoDist);
   const sizeMeasurer = (label, fontSize) => ({
     width: fontSize * 0.6 * label.length,
     height: fontSize

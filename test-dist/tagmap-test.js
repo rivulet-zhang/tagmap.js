@@ -8,17 +8,21 @@ var _axios = require('axios');
 
 var _axios2 = _interopRequireDefault(_axios);
 
+var _hdbscanjs = require('hdbscanjs');
+
+var _hdbscanjs2 = _interopRequireDefault(_hdbscanjs);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-/* global it, describe, console */
+var FILE_PATH = 'https://rivulet-zhang.github.io/dataRepo/tagmap/hashtags10k.json'; /* global it, describe, console */
 /* eslint-disable max-len */
 /* eslint no-console: ["error", { allow: ["log", "warn", "error"] }] */
 // import { expect } from 'chai';
-var FILE_PATH = 'https://rivulet-zhang.github.io/dataRepo/tagmap/hashtags10k.json';
+
 
 describe('hdbscan', function () {
 
-  var tagMap = new _tagmap2.default(_tagmap2.default.distFunc.geoDist);
+  var tagMap = new _tagmap2.default(_hdbscanjs2.default.distFunc.geoDist);
   var sizeMeasurer = function sizeMeasurer(label, fontSize) {
     return {
       width: fontSize * 0.6 * label.length,

@@ -114,7 +114,7 @@ var TagMap = function () {
         }, bbox);
 
         // generate tags which passed the test and weightThreshold
-        var tags = flagCluster.forEach(function (val) {
+        flagCluster.forEach(function (val) {
           var tag = new _tag2.default(key);
           val.data.forEach(function (p, i) {
             return tag.add(p, val.opt[i]);
@@ -236,7 +236,7 @@ var TagMap = function () {
 
       // run actual layout algorithm
       var placedTag = [];
-      var tree = (0, _rbush2.default)();
+      var tree = new _rbush2.default();
       var _iteratorNormalCompletion = true;
       var _didIteratorError = false;
       var _iteratorError = undefined;
